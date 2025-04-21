@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>台灣縣市輪廓展開動畫—可調整Bar長度與間距</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+    <style>
+      body {
+        font-family: "Inter", sans-serif;
+        margin: 0;
+        padding: 20px;
+        background: #1a1a1a;
+        color: #e0e0e0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+      }
+      #canvas-container {
+        width: 1280px;
+        height: 700px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        border: 1px solid #444;
+        border-radius: 8px;
+        overflow: hidden;
+        margin-bottom: 20px;
+      }
+      canvas {
+        display: block;
+      }
+      #control-panel {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 15px;
+        justify-content: center;
+        margin-bottom: 10px;
+      }
+      .ctrl {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        font-size: 14px;
+      }
+      .ctrl label {
+        margin-bottom: 4px;
+        color: #ccc;
+      }
+      .ctrl input,
+      .ctrl select {
+        width: 150px;
+      }
+      .ctrl span {
+        margin-top: 2px;
+        color: #fff;
+      }
+      button {
+        padding: 8px 16px;
+        font-size: 16px;
+        background: #007bff;
+        color: #fff;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        transition: background 0.3s;
+      }
+      button:hover {
+        background: #0056b3;
+      }
+      button:disabled {
+        background: #555;
+        cursor: not-allowed;
+        opacity: 0.7;
+      }
+      #current-county-display {
+        margin-bottom: 10px;
+        font-size: 18px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>台灣縣市輪廓展開動畫</h1>
+    <p style="text-align: center; color: #aaa; margin-bottom: 10px">
+      持續顯示所有縣市 → 輪到時高亮並 morph → 排序條狀<br />
+      新增 Bar 長度縮放 與 Bar 間距 控制
+    </p>
+
+    <div id="control-panel">
+      <div class="ctrl"><label>條起點 X</label><input id="barXInput" type="range" min="0" max="1280" value="100" /><span id="barXVal">100</span></div>
+      <div class="ctrl"><label>條起點 Y</label><input id="barYInput" type="range" min="0" max="700" value="430" /><span id="barYVal">430</span></div>
+      <div class="ctrl"><label>Bar 文字大小</label><input id="fontSizeInput" type="range" min="6" max="24" value="10" /><span id="fontSizeVal">10</span></div>
+      <div class="ctrl"><label>地圖縮放係數</label><input id="mapScaleCoeffInput" type="range" min="0.1" max="10" step="0.01" value="0.8" /><span id="mapScaleCoeffVal">0.80</span></div>
+      <div class="ctrl"><label>中心 偏移 X</label><input id="centerXInput" type="range" min="-400" max="1000" value="0" /><span id="centerXVal">0</span></div>
+      <div class="ctrl"><label>中心 偏移 Y</label><input id="centerYInput" type="range" min="-300" max="1000" value="0" /><span id="centerYVal">0</span></div>
+      <div class="ctrl"><label>Bar 長度縮放</label><input id="barScaleInput" type="range" min="0.1" max="5" step="0.1" value="1.0" /><span id="barScaleVal">1.0</span></div>
+      <div class="ctrl"><label>Bar 間距</label><input id="spacingInput" type="range" min="5" max="100" step="1" value="15" /><span id="spacingVal">15</span></div>
+      <div class="ctrl">
+        <label>配色方案</label>
+        <select id="paletteSelect">
+          <option value="0">經典藍調</option>
+          <option value="1">熱帶日落</option>
+          <option value="2">森林綠意</option>
+          <option value="3">單色灰階</option>
+          <option value="4">活力撞色</option>
+          <option value="5">柔和粉彩</option>
+          <option value="6">高對比黑白</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="current-county-display">載入中…</div>
+    <div id="canvas-container"></div>
+    <button id="nextButton" disabled>開始動畫</button>
+
+    <script>
+      const perimeterData = {
+        金門縣: 145.5,
+        新北市: 517.65,
+        嘉義縣: 419.1,
+        桃園市: 267.69,
+        花蓮縣: 469.23,
+        澎湖縣: 583.66,
+        臺北市: 108.53,
+        彰化縣: 208.47,
+        屏東縣: 383.59,
+        基隆市: 85.42,
+        雲林縣: 332.29,
+        新竹市: 67.08,
+        苗栗縣: 229.71,
+        新竹縣: 249.29,
+        南投縣: 405.64,
+        連江縣: 163.65,
+        高雄市: 468.79,
+        宜蘭縣: 351.16,
+        臺東縣: 534.47,
+        臺中市: 335.08,
+        臺南市: 259.8,
+        嘉義市: 46.08,
+      };
+
+      let countyData = [],
+        displayedLines = [],
+        taiwanGeoJson;
+      let appState = "LOADING",
+        currentCountyIndex = -1;
+      let unfoldProgress = 0,
+        sortProgress = 1;
+      const animationDuration = 0.8;
+      const canvasWidth = 1280,
+        canvasHeight = 700;
+      const mapHeightRatio = 0.8,
+        mapHeight = canvasHeight * mapHeightRatio;
+      let globalScale = 1,
+        globalTx = 0,
+        globalTy = 0;
+      let palettes, mapStrokeColor, bgColor, lineLabelColor;
+
+      // DOM
+      let barXInput, barYInput, fontSizeInput, mapCoeffInput, centerXInput, centerYInput;
+      let barScaleInput, spacingInput;
+      let barXVal, barYVal, fontSizeVal, mapCoeffVal, centerXVal, centerYVal;
+      let barScaleVal, spacingVal;
+      let paletteSelect, nextButton;
+
+      function preload() {
+        taiwanGeoJson = loadJSON(
+          "public/all_simp.geojson",
+          (d) => console.log("GeoJSON loaded:", d.features.length),
+          (e) => {
+            console.error("Load failed", e);
+            noLoop();
+          }
+        );
+      }
+
+      function setup() {
+        createCanvas(canvasWidth, canvasHeight).parent("canvas-container");
+        pixelDensity(1);
+        colorMode(HSB, 360, 100, 100, 100);
+        bgColor = color(240, 10, 10);
+        lineLabelColor = color(0, 0, 90);
+
+        // 綁定
+        barXInput = document.getElementById("barXInput");
+        barYInput = document.getElementById("barYInput");
+        fontSizeInput = document.getElementById("fontSizeInput");
+        mapCoeffInput = document.getElementById("mapScaleCoeffInput");
+        centerXInput = document.getElementById("centerXInput");
+        centerYInput = document.getElementById("centerYInput");
+        barScaleInput = document.getElementById("barScaleInput");
+        spacingInput = document.getElementById("spacingInput");
+        paletteSelect = document.getElementById("paletteSelect");
+        nextButton = document.getElementById("nextButton");
+
+        barXVal = document.getElementById("barXVal");
+        barYVal = document.getElementById("barYVal");
+        fontSizeVal = document.getElementById("fontSizeVal");
+        mapCoeffVal = document.getElementById("mapScaleCoeffVal");
+        centerXVal = document.getElementById("centerXVal");
+        centerYVal = document.getElementById("centerYVal");
+        barScaleVal = document.getElementById("barScaleVal");
+        spacingVal = document.getElementById("spacingVal");
+
+        // 面板事件
+        barXInput.oninput = () => (barXVal.textContent = barXInput.value);
+        barYInput.oninput = () => (barYVal.textContent = barYInput.value);
+        fontSizeInput.oninput = () => (fontSizeVal.textContent = fontSizeInput.value);
+        mapCoeffInput.oninput = () => (mapCoeffVal.textContent = parseFloat(mapCoeffInput.value).toFixed(2));
+        centerXInput.oninput = () => (centerXVal.textContent = centerXInput.value);
+        centerYInput.oninput = () => (centerYVal.textContent = centerYInput.value);
+        barScaleInput.oninput = () => (barScaleVal.textContent = parseFloat(barScaleInput.value).toFixed(1));
+        spacingInput.oninput = () => (spacingVal.textContent = spacingInput.value);
+        paletteSelect.onchange = () => applyPalette(+paletteSelect.value);
+        nextButton.onclick = handleNextStep;
+
+        // 配色方案
+        palettes = [
+          { mapStroke: [210, 20, 80], barHue: 210, barSat: 50, barBr: [90, 60] },
+          { mapStroke: [15, 80, 90], barHue: 15, barSat: 70, barBr: [90, 60] },
+          { mapStroke: [120, 40, 80], barHue: 120, barSat: 60, barBr: [90, 50] },
+          { mapStroke: [0, 0, 60], barHue: 0, barSat: 0, barBr: [80, 40] },
+          { mapStroke: [330, 60, 90], barHue: 330, barSat: 70, barBr: [90, 60] },
+          { mapStroke: [300, 20, 90], barHue: 300, barSat: 30, barBr: [90, 70] },
+          { mapStroke: [0, 0, 20], barHue: 0, barSat: 0, barBr: [100, 10] },
+        ];
+
+        if (!taiwanGeoJson) return;
+        processGeoData();
+        applyPalette(0);
+        nextButton.disabled = false;
+        appState = "SHOW_ALL_MAPS";
+        updateCountyDisplay("點擊開始 → 一次顯示所有縣市");
+      }
+
+      function processGeoData() {
+        countyData = taiwanGeoJson.features.map((ft, i) => {
+          const name = ft.properties?.COUNTYNAME || `縣市${i}`;
+          let b = [Infinity, Infinity, -Infinity, -Infinity],
+            geo = [];
+          const polys = ft.geometry.type === "Polygon" ? [ft.geometry.coordinates] : ft.geometry.coordinates;
+          polys.forEach((rings) => {
+            let ring = rings[0],
+              cum = 0,
+              pts = [];
+            ring.forEach((p, j) => {
+              if (j > 0) cum += dist(ring[j - 1][0], ring[j - 1][1], p[0], p[1]);
+              pts.push({ coord: p, dist: cum });
+              b[0] = min(b[0], p[0]);
+              b[1] = min(b[1], p[1]);
+              b[2] = max(b[2], p[0]);
+              b[3] = max(b[3], p[1]);
+            });
+            geo.push({ vertices: pts, ringPerimeter: cum });
+          });
+          geo.sort((a, b) => b.ringPerimeter - a.ringPerimeter);
+          const rawP = perimeterData[name] || geo[0]?.ringPerimeter || 0;
+          return { name, processedGeo: geo, totalRawPerimeter: rawP, featureBounds: b, displayPerimeter: rawP, unfoldTargetY: 0, color: color(0, 0, 100) };
+        });
+        computeGlobalTransform();
+      }
+
+      function computeGlobalTransform() {
+        let minX = Infinity,
+          minY = Infinity,
+          maxX = -Infinity,
+          maxY = -Infinity;
+        countyData.forEach((c) => {
+          const [x1, y1, x2, y2] = c.featureBounds;
+          minX = min(minX, x1);
+          minY = min(minY, y1);
+          maxX = max(maxX, x2);
+          maxY = max(maxY, y2);
+        });
+        const dx = maxX - minX,
+          dy = maxY - minY,
+          pad = 50;
+        const coeff = parseFloat(mapCoeffInput.value),
+          scale = coeff * min((canvasWidth - 2 * pad) / dx, (mapHeight - 2 * pad) / dy);
+        globalScale = scale;
+        globalTx = canvasWidth / 2 - scale * (minX + dx / 2) + parseInt(centerXInput.value);
+        const tyNon = mapHeight / 2 - scale * (minY + dy / 2);
+        globalTy = mapHeight - tyNon + parseInt(centerYInput.value);
+      }
+
+      function applyPalette(idx) {
+        const p = palettes[idx],
+          n = countyData.length;
+        mapStrokeColor = color(...p.mapStroke);
+        countyData.forEach((c, j) => {
+          const [b0, b1] = p.barBr,
+            br = lerp(b0, b1, j / (n - 1));
+          c.color = color(p.barHue, p.barSat, br);
+        });
+      }
+
+      function updateCountyDisplay(txt) {
+        const el = document.getElementById("current-county-display");
+        if (txt) {
+          el.textContent = txt;
+          return;
+        }
+        let msg = "";
+        switch (appState) {
+          case "SHOW_ALL_MAPS":
+            msg = "一次顯示所有縣市";
+            break;
+          case "UNFOLDING":
+            if (currentCountyIndex >= 0 && currentCountyIndex < countyData.length) {
+              msg = `展開: ${countyData[currentCountyIndex].name}`;
+            }
+            break;
+          case "SORTING_LINES":
+            msg = "排序中…";
+            break;
+          case "FINISHED":
+            msg = "動畫結束";
+            break;
+        }
+        el.textContent = msg;
+      }
+
+      function draw() {
+        background(bgColor);
+        computeGlobalTransform();
+
+        const barX = +barXInput.value,
+          barY = +barYInput.value,
+          fontSz = +fontSizeInput.value,
+          barScale = parseFloat(barScaleInput.value),
+          spacing = parseInt(spacingInput.value);
+
+        // 更新每個的 displayLength
+        countyData.forEach((c) => (c.displayLength = c.displayPerimeter * barScale));
+        displayedLines.forEach((d) => (d.displayLength = d.displayPerimeter * barScale));
+
+        // 繪製所有多邊形並高亮
+        push();
+        translate(globalTx, globalTy);
+        scale(globalScale, -globalScale);
+        countyData.forEach((c, i) => {
+          if (i === currentCountyIndex && appState === "UNFOLDING") {
+            stroke(c.color);
+            strokeWeight(3 / globalScale);
+            fill(hue(c.color), saturation(c.color), brightness(c.color), 30);
+          } else {
+            stroke(mapStrokeColor);
+            strokeWeight(1.5 / globalScale);
+            fill(0, 0, 100, 10);
+          }
+          beginShape();
+          c.processedGeo[0].vertices.forEach((v) => vertex(v.coord[0], v.coord[1]));
+          endShape(CLOSE);
+        });
+        pop();
+
+        if (appState === "SHOW_ALL_MAPS") return;
+
+        // 動畫
+        if (appState === "UNFOLDING") {
+          unfoldProgress += deltaTime / 1000 / animationDuration;
+          if (unfoldProgress >= 1) {
+            unfoldProgress = 1;
+            appState = "ADD_LINE";
+          }
+          updateCountyDisplay();
+        }
+        if (appState === "SORTING_LINES") {
+          sortProgress += deltaTime / 1000 / animationDuration;
+          if (sortProgress >= 1) {
+            sortProgress = 1;
+            displayedLines.forEach((d) => (d.lineY = d.targetY));
+            if (currentCountyIndex < countyData.length - 1) {
+              currentCountyIndex++;
+              unfoldProgress = 0;
+              appState = "UNFOLDING";
+            } else {
+              appState = "FINISHED";
+              nextButton.textContent = "重新開始";
+              nextButton.disabled = false;
+            }
+            updateCountyDisplay();
+          }
+        }
+
+        // morph 當前
+        const curr = countyData[currentCountyIndex];
+        if (curr && appState === "UNFOLDING") {
+          push();
+          translate(globalTx, globalTy);
+          scale(globalScale, -globalScale);
+          noFill();
+          stroke(mapStrokeColor);
+          strokeWeight(1 / globalScale);
+          beginShape();
+          curr.processedGeo[0].vertices.forEach((vd) => {
+            let x = vd.coord[0],
+              y = vd.coord[1];
+            const sx = barX + (vd.dist / curr.totalRawPerimeter) * curr.displayLength;
+            const sy = curr.unfoldTargetY;
+            const wx = (sx - globalTx) / globalScale,
+              wy = (sy - globalTy) / -globalScale;
+            x = lerp(x, wx, unfoldProgress);
+            y = lerp(y, wy, unfoldProgress);
+            vertex(x, y);
+          });
+          endShape(CLOSE);
+          pop();
+        }
+
+        // ADD_LINE
+        if (appState === "ADD_LINE") {
+          displayedLines.push(curr);
+          curr.lineY = curr.unfoldTargetY;
+          curr.targetY = curr.lineY;
+          displayedLines.sort((a, b) => b.displayPerimeter - a.displayPerimeter);
+          displayedLines.forEach((ld, i) => (ld.targetY = barY + i * spacing));
+          sortProgress = 0;
+          appState = "SORTING_LINES";
+        }
+
+        // 排序條
+        push();
+        textAlign(RIGHT, CENTER);
+        textSize(fontSz);
+        strokeWeight(4);
+        displayedLines.forEach((ld) => {
+          const y = appState === "SORTING_LINES" ? lerp(ld.lineY, ld.targetY, easeInOutQuint(sortProgress)) : ld.lineY;
+          stroke(ld.color);
+          line(barX, y, barX + ld.displayLength, y);
+          noStroke();
+          fill(lineLabelColor);
+          text(`${ld.name} (${ld.displayPerimeter.toFixed(1)} km)`, barX - 5, y);
+        });
+        pop();
+      }
+
+      function handleNextStep() {
+        if (appState === "SHOW_ALL_MAPS") {
+          currentCountyIndex = 0;
+          unfoldProgress = 0;
+          appState = "UNFOLDING";
+          nextButton.disabled = true;
+          updateCountyDisplay();
+        } else if (appState === "FINISHED") {
+          displayedLines = [];
+          currentCountyIndex = -1;
+          unfoldProgress = 0;
+          sortProgress = 1;
+          appState = "SHOW_ALL_MAPS";
+          nextButton.textContent = "開始動畫";
+          updateCountyDisplay("點擊開始 → 一次顯示所有縣市");
+        }
+      }
+
+      function easeInOutQuint(t) {
+        return t < 0.5 ? 16 * t ** 5 : 1 + 16 * --t * t ** 4;
+      }
+    </script>
+  </body>
+</html>
