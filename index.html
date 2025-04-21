@@ -18,7 +18,7 @@
       }
       #canvas-container {
         width: 1280px;
-        height: 700px;
+        height: 720px;
         box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
         border: 1px solid #444;
         border-radius: 8px;
@@ -86,14 +86,14 @@
     </p>
 
     <div id="control-panel">
-      <div class="ctrl"><label>條起點 X</label><input id="barXInput" type="range" min="0" max="1280" value="100" /><span id="barXVal">100</span></div>
-      <div class="ctrl"><label>條起點 Y</label><input id="barYInput" type="range" min="0" max="700" value="430" /><span id="barYVal">430</span></div>
-      <div class="ctrl"><label>Bar 文字大小</label><input id="fontSizeInput" type="range" min="6" max="24" value="10" /><span id="fontSizeVal">10</span></div>
-      <div class="ctrl"><label>地圖縮放係數</label><input id="mapScaleCoeffInput" type="range" min="0.1" max="10" step="0.01" value="0.8" /><span id="mapScaleCoeffVal">0.80</span></div>
+      <div class="ctrl"><label>條起點 X</label><input id="barXInput" type="range" min="0" max="1280" value="297" /><span id="barXVal">100</span></div>
+      <div class="ctrl"><label>條起點 Y</label><input id="barYInput" type="range" min="0" max="700" value="128" /><span id="barYVal">430</span></div>
+      <div class="ctrl"><label>Bar 文字大小</label><input id="fontSizeInput" type="range" min="6" max="24" value="16" /><span id="fontSizeVal">10</span></div>
+      <div class="ctrl"><label>地圖縮放係數</label><input id="mapScaleCoeffInput" type="range" min="0.1" max="10" step="0.01" value="5.14" /><span id="mapScaleCoeffVal">0.80</span></div>
       <div class="ctrl"><label>中心 偏移 X</label><input id="centerXInput" type="range" min="-400" max="1000" value="0" /><span id="centerXVal">0</span></div>
-      <div class="ctrl"><label>中心 偏移 Y</label><input id="centerYInput" type="range" min="-300" max="1000" value="0" /><span id="centerYVal">0</span></div>
-      <div class="ctrl"><label>Bar 長度縮放</label><input id="barScaleInput" type="range" min="0.1" max="5" step="0.1" value="1.0" /><span id="barScaleVal">1.0</span></div>
-      <div class="ctrl"><label>Bar 間距</label><input id="spacingInput" type="range" min="5" max="100" step="1" value="15" /><span id="spacingVal">15</span></div>
+      <div class="ctrl"><label>中心 偏移 Y</label><input id="centerYInput" type="range" min="-300" max="1000" value="916" /><span id="centerYVal">0</span></div>
+      <div class="ctrl"><label>Bar 長度縮放</label><input id="barScaleInput" type="range" min="0.1" max="5" step="0.1" value="0.6" /><span id="barScaleVal">1.0</span></div>
+      <div class="ctrl"><label>Bar 間距</label><input id="spacingInput" type="range" min="5" max="100" step="1" value="24" /><span id="spacingVal">15</span></div>
       <div class="ctrl">
         <label>配色方案</label>
         <select id="paletteSelect">
@@ -147,10 +147,10 @@
         sortProgress = 1;
       const animationDuration = 0.8;
       const canvasWidth = 1280,
-        canvasHeight = 700;
+        canvasHeight = 720;
       const mapHeightRatio = 0.8,
         mapHeight = canvasHeight * mapHeightRatio;
-      let globalScale = 1,
+      let globalScale = 10,
         globalTx = 0,
         globalTy = 0;
       let palettes, mapStrokeColor, bgColor, lineLabelColor;
@@ -254,7 +254,7 @@
           });
           geo.sort((a, b) => b.ringPerimeter - a.ringPerimeter);
           const rawP = perimeterData[name] || geo[0]?.ringPerimeter || 0;
-          return { name, processedGeo: geo, totalRawPerimeter: rawP, featureBounds: b, displayPerimeter: rawP, unfoldTargetY: 0, color: color(0, 0, 100) };
+          return { name, processedGeo: geo, totalRawPerimeter: rawP, featureBounds: b, displayPerimeter: rawP, unfoldTargetY: 30, color: color(0, 0, 100) };
         });
         computeGlobalTransform();
       }
@@ -306,7 +306,7 @@
             break;
           case "UNFOLDING":
             if (currentCountyIndex >= 0 && currentCountyIndex < countyData.length) {
-              msg = `展開: ${countyData[currentCountyIndex].name}`;
+              // msg = `展開: ${countyData[currentCountyIndex].name}`;
             }
             break;
           case "SORTING_LINES":
@@ -396,7 +396,7 @@
             let x = vd.coord[0],
               y = vd.coord[1];
             const sx = barX + (vd.dist / curr.totalRawPerimeter) * curr.displayLength;
-            const sy = curr.unfoldTargetY;
+            const sy = curr.unfoldTargetY + 30;
             const wx = (sx - globalTx) / globalScale,
               wy = (sy - globalTy) / -globalScale;
             x = lerp(x, wx, unfoldProgress);
@@ -410,7 +410,7 @@
         // ADD_LINE
         if (appState === "ADD_LINE") {
           displayedLines.push(curr);
-          curr.lineY = curr.unfoldTargetY;
+          curr.lineY = curr.unfoldTargetY + 30;
           curr.targetY = curr.lineY;
           displayedLines.sort((a, b) => b.displayPerimeter - a.displayPerimeter);
           displayedLines.forEach((ld, i) => (ld.targetY = barY + i * spacing));
